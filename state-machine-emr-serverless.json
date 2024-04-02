@@ -1,0 +1,86 @@
+{
+    "Comment": "Workflow to orchestrate an EMR serverless job.",
+    "StartAt": "EMR Serverless StartApplication",
+    "States": {
+        "EMR Serverless StartApplication": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::emr-serverless:startApplication.sync",
+            "Parameters": {
+                "ApplicationId": "00f2r46sd2stm309"
+            },
+            "Next": "Submit PySpark Job"
+        },
+        "Submit PySpark Job": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::emr-serverless:startJobRun.sync",
+            "Parameters": {
+                "ApplicationId.$": "$.ApplicationId",
+                "ExecutionRoleArn": "arn:aws:iam::741358071637:role/EMRServerlessRole",
+                "JobDriver": {
+                    "SparkSubmit": {
+                        "EntryPoint": "s3://data-lake-kraisfeld/test-spark-xml.py",
+                        "EntryPointArguments": [],
+                        "SparkSubmitParameters": "--jars s3://data-lake-kraisfeld/spark-xml_2.12-0.17.0.jar"
+                    }
+                }
+            },
+            "Next": "Check Job Success"
+        },
+        "Check Job Success": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "And": [
+                        {
+                            "Variable": "$.State",
+                            "IsPresent": true
+                        },
+                        {
+                            "Or": [
+                                {
+                                    "Variable": "$.State",
+                                    "StringEquals": "SUCCESS"
+                                }
+                            ]
+                        }
+                    ],
+                    "Next": "Success"
+                }
+            ],
+            "Default": "Check Job Failure"
+        },
+        "Check Job Failure": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "And": [
+                        {
+                            "Variable": "$.State",
+                            "IsPresent": true
+                        },
+                        {
+                            "Or": [
+                                {
+                                    "Variable": "$.State",
+                                    "StringEquals": "CANCELLED"
+                                },
+                                {
+                                    "Variable": "$.State",
+                                    "StringEquals": "FAILED"
+                                }
+                            ]
+                        }
+                    ],
+                    "Next": "Failure"
+                }
+            ],
+            "Default": "Failure"
+        },
+        "Failure": {
+            "Type": "Fail"
+        },
+        "Success": {
+            "Type": "Succeed"
+        }
+    }
+}
